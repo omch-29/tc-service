@@ -1,0 +1,270 @@
+const acorn = require("acorn");
+function complexityRank(c) {
+  const order = [
+    "O(1)",
+    "O(log n)",
+    "O(n)",
+    "O(n log n)",
+    "O(n^2)",
+    "O(n^2 * log n)",
+    "O(n^3)",
+    "O(2^n)"
+  ];
+  return order.indexOf(c);
+}
+
+function maxComplexity(a, b) {
+  return complexityRank(a) > complexityRank(b) ? a : b;
+}
+
+function minComplexity(a, b) {
+  return complexityRank(a) < complexityRank(b) ? a : b;
+}
+
+function thetaIfPossible(bigO, bigOmega) {
+  return bigO === bigOmega ? bigO.replace("O", "Θ") : null;
+}
+function detectRecursion(code, fnName) {
+  const calls = new RegExp(`\\b${fnName}\\s*\\(`, "g");
+  return (code.match(calls) || []).length > 1;
+}
+
+function detectLinearRecursion(code) {
+  return /return\s+\w+\(.*n\s*[-+]\s*1/.test(code);
+}
+
+function detectLogRecursion(code) {
+  return /return\s+\w+\(.*n\s*\/\s*2/.test(code);
+}
+
+function detectSpaceN(code) {
+  return (
+    /new\s+\w+\[n\]/.test(code) ||     // C++ / Java
+    /vector<.*>\s+\w+\(n\)/.test(code) ||
+    /ArrayList/.test(code) ||
+    /list\s*=/.test(code) ||
+    /arr\s*=\s*\[.*\]/.test(code)
+  );
+}
+function generateFlowGraph(code) {
+  const lines = code.split("\n");
+  const nodes = [];
+  const edges = [];
+
+  let last = null;
+  let id = 0;
+
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const node = { id: ++id, label: trimmed };
+    nodes.push(node);
+
+    if (last) edges.push({ from: last.id, to: node.id });
+
+    if (/for|while/.test(trimmed)) {
+      edges.push({ from: node.id, to: node.id }); // loop back
+    }
+
+    last = node;
+  }
+
+  return { nodes, edges };
+}
+
+
+   function detectLoopNesting(code, language) {
+  let stack = [];
+  let maxN = 0;
+  let maxLog = 0;
+  let depth = 0;
+
+  const lines = code.split("\n");
+
+  for (let raw of lines) {
+    const line = raw.trim();
+
+    // ENTER BLOCK
+    if (/{/.test(line)) depth++;
+
+    // ENTER linear loop
+    if (
+      (language !== "python" && /for\s*\(.*<\s*n/.test(line)) ||
+      (language === "python" && /for\s+\w+\s+in\s+range\(.*n/.test(line))
+    ) {
+      stack.push({ type: "n", depth });
+      maxN = Math.max(
+        maxN,
+        stack.filter(x => x.type === "n").length
+      );
+    }
+
+    // ENTER log loop
+    if (/while\s*\(.*>\s*1/.test(line)) {
+      stack.push({ type: "log", depth });
+      maxLog = Math.max(
+        maxLog,
+        stack.filter(x => x.type === "log").length
+      );
+    }
+
+    // EXIT BLOCK
+    if (/}/.test(line)) {
+      // pop ONLY loops that belong to this block
+      while (stack.length && stack[stack.length - 1].depth === depth) {
+        stack.pop();
+      }
+      depth--;
+    }
+  }
+
+  return { maxN, maxLog };
+}
+
+function normalizeCode(code) {
+  return code
+    .replace(/;/g, ";\n")
+    .replace(/{/g, "{\n")
+    .replace(/}/g, "\n}\n")
+    .replace(/for\s*\(/g, "\nfor(")
+    .replace(/while\s*\(/g, "\nwhile(");
+}
+
+function analyzeLoopsSimple(code, language) {
+    code = normalizeCode(code);
+  const forCount =
+    language === "python"
+      ? (code.match(/for\s+\w+\s+in\s+range\(.*n/g) || []).length
+      : (code.match(/for\s*\(.*<\s*n/g) || []).length;
+
+  const hasLogLoop =
+    /while\s*\(.*>\s*1/.test(code) ||
+    /while\s+.*>\s*1/.test(code);
+
+  if (forCount >= 2 && hasLogLoop) return "O(n^2 * log n)";
+  if (forCount >= 2) return "O(n^2)";
+  if (forCount === 1 && hasLogLoop) return "O(n log n)";
+  if (forCount === 1) return "O(n)";
+  if (hasLogLoop) return "O(log n)";
+
+  return "O(1)";
+}
+
+
+function detectBranchingRecursion(code, fnName) {
+  const calls = code.match(new RegExp(`${fnName}\\s*\\(`, "g")) || [];
+  return calls.length > 1;
+}
+
+
+//----------------------------CPP---------------------------------------
+function analyzeCPP(code) {
+  let worst = "O(1)";
+  let best = "O(1)";
+  let space = "O(1)";
+  let explanation = [];
+worst = analyzeLoopsSimple(code, "cpp");
+  // Loops
+//   const forN = (code.match(/for\s*\(.*<\s*n/g) || []).length;
+//   const whileLog = (code.match(/while\s*\(.*>\s*1/g) || []).length;
+
+//   if (forN && whileLog) worst = "O(n^" + forN + " * log n)";
+//   else if (forN) worst = forN > 1 ? "O(n^" + forN + ")" : "O(n)";
+//   else if (whileLog) worst = "O(log n)";
+
+//   best = whileLog ? "O(log n)" : forN ? "O(n)" : "O(1)";
+// const normalized = normalizeCode(code);
+// const { maxN, maxLog } = detectLoopNesting(normalized, "cpp");
+
+// if (maxN && maxLog) {
+//   worst = `O(n^${maxN} * log n)`;
+// }
+// else if (maxN) {
+//   worst = maxN > 1 ? `O(n^${maxN})` : "O(n)";
+// }
+// else if (maxLog) {
+//   worst = "O(log n)";
+// }
+
+  // Recursion
+  if (detectRecursion(code, "test")) {
+  if (detectLogRecursion(code)) {
+    // worst = "O(log n)";
+    worst = maxComplexity(worst, "O(log n)");
+  }
+  else if (detectLinearRecursion(code) && !detectBranchingRecursion(code, "test")) {
+    worst = maxComplexity(worst, "O(n)");
+  }
+  else {
+    worst = maxComplexity(worst, "O(2^n)");
+  }
+
+  space = maxComplexity(space, "O(n)");
+  explanation.push("Recursion detected.");
+}
+  // Space
+  if (detectSpaceN(code)) {
+    space = "O(n)";
+    explanation.push("Dynamic array allocation detected.");
+  }
+
+  const theta = thetaIfPossible(worst, best);
+
+  return {
+    bigO: worst,
+    bigOmega: best,
+    bigTheta: theta,
+    spaceComplexity: space,
+    explanation,
+    confidence: 0.85,
+    graph: generateFlowGraph(code)
+  };
+}
+function analyzeJava(code) {
+  return analyzeCPP(code); // Java syntax close enough for regex
+}
+function analyzePython(code) {
+  let worst = "O(1)";
+  let best = "O(1)";
+  let space = "O(1)";
+  let explanation = [];
+
+//   const forN = (code.match(/for\s+\w+\s+in\s+range\(.*n/g) || []).length;
+//   const whileLog = (code.match(/while\s+.*>\s*1/g) || []).length;
+
+//   if (forN && whileLog) worst = "O(n^" + forN + " * log n)";
+//   else if (forN) worst = forN > 1 ? "O(n^" + forN + ")" : "O(n)";
+//   else if (whileLog) worst = "O(log n)";
+
+//   best = whileLog ? "O(log n)" : forN ? "O(n)" : "O(1)";
+worst = analyzeLoopsSimple(code, "python");
+
+  if (detectRecursion(code, "test")) {
+    worst = detectLogRecursion(code) ? "O(log n)" : "O(n)";
+    space = "O(n)";
+    explanation.push("Recursive function detected.");
+  }
+
+  if (detectSpaceN(code)) {
+    space = "O(n)";
+    explanation.push("List allocation detected.");
+  }
+
+  const theta = thetaIfPossible(worst, best);
+
+  return {
+    bigO: worst,
+    bigOmega: best,
+    bigTheta: theta,
+    spaceComplexity: space,
+    explanation,
+    confidence: 0.85,
+    graph: generateFlowGraph(code)
+  };
+}
+module.exports = {
+  analyzeCPP,
+  analyzeJava,
+  analyzePython
+};
