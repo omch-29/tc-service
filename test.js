@@ -15,3 +15,4 @@ console.log(trian.analyzeCPP(cppCode));
 
 
 //cpp code test
+//python code
