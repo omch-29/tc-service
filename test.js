@@ -13,6 +13,3 @@ void test(int n){
 
 console.log(trian.analyzeCPP(cppCode));
 
-
-//cpp code test
-//python code
